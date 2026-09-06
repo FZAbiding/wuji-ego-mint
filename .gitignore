@@ -60,7 +60,6 @@ data/samples/*
 !data/samples/README.md
 !data/samples/manifest.example.json
 !data/samples/release-manifest.json
-!data/samples/mint-web-viewer.png
 !data/samples/lerobot_v3/
 !data/samples/lerobot_v3/**
 
@@ -74,3 +73,6 @@ data/samples/*
 *.safetensors
 *.onnx
 wandb/
+
+# Dataset cards are uploaded to Hugging Face / ModelScope by hand, not tracked here
+docs/dataset-card/
