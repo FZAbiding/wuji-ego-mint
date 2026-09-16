@@ -851,6 +851,33 @@ def check_dataloader(
     )
 
 
+def convert_das_pseudo_gt(
+    prepared_dir: Path,
+    vio_npz: Path,
+    hawor_npz: Path,
+    output_dir: Path,
+    *,
+    overwrite: bool = False,
+) -> Path:
+    """Export aligned DAS VIO + camera-frame HaWoR labels as training-ready v3.
+
+    Unlike :func:`convert`, this path writes the budget-format columns consumed
+    directly by ``LeRobotV3Dataset`` (``cam_*``, ``hand_kept`` and per-side
+    ``mano_*``).  The implementation lives with the DAS adapter so the stable
+    ``python -m mint das-ego all`` entry point and this legacy task share one
+    schema and one validator.
+    """
+    from mint.das_ego import export_lerobot
+
+    return export_lerobot(
+        prepared_dir,
+        vio_npz,
+        hawor_npz,
+        output_dir,
+        overwrite=overwrite,
+    )
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--result", nargs="+", required=True,

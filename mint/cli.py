@@ -6,7 +6,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-
 PROJECT_DIR = Path(__file__).resolve().parents[1]
 
 
@@ -27,7 +26,7 @@ def main(argv: list[str] | None = None) -> int:
     import argparse
 
     raw = list(sys.argv[1:] if argv is None else argv)
-    commands = ("pipeline", "train", "infer", "viewer", "doctor")
+    commands = ("pipeline", "train", "infer", "viewer", "doctor", "das-ego")
     parser = argparse.ArgumentParser(
         prog="python -m mint",
         description="MINT egocentric video toolkit",
@@ -53,6 +52,10 @@ def main(argv: list[str] | None = None) -> int:
         return _run_script("eval/model_effect/visualization/viewer_web.py", remainder)
     from .doctor import doctor_main
 
+    if command == "das-ego":
+        from .das_ego import main as das_ego_main
+
+        return das_ego_main(remainder)
     return doctor_main(remainder)
 
 

@@ -10,6 +10,7 @@ tests/
 !tests/
 tests/*
 !tests/__init__.py
+!tests/test_das_ego.py
 !tests/test_inference_acceleration.py
 !eval/model_effect/benchmark/tests/
 !eval/model_effect/benchmark/tests/**
