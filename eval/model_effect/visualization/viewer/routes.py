@@ -581,6 +581,7 @@ def create_app(store) -> Flask:
         reg = 0 <= eid < store.n_items()
         return jsonify(fps=(store.item_fps(eid) if reg else store.default_fps),
                        no_truth=(store.is_no_truth(eid) if reg else False),
+                       truth_label=(store.item_truth_label(eid) if reg else "GT"),
                        modes=MODES, default_mode=store.default_mode,
                        layouts=LAYOUTS, default_layout=DEFAULT_LAYOUT,
                        contents=CONTENTS, default_content=CONTENTS[0],

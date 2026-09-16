@@ -492,6 +492,7 @@ video.v2d { display: block; width: 100%; max-height: 52vh; background: #000; }
 .robot-comparison-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 11px; }
 .robot-comparison-grid.is-comparison { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .robot-video-cell { min-width: 0; }
+.robot-empty-reference { min-height: 270px; border: 1px solid var(--line-soft); border-radius: 11px; background: #0c0c0c; }
 .robot-video-label { display: inline-flex; align-items: center; margin: 0 0 6px 3px; color: var(--cyan); font: 750 10px/1 "JetBrains Mono", monospace; letter-spacing: .14em; }
 .robot-video-cell[data-robot-source="gt"] .robot-video-label { color: var(--acid); }
 .mujoco-wrap video { display: block; width: 100%; max-height: 58vh; background: #000; }

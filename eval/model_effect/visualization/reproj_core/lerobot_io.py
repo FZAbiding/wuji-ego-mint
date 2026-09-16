@@ -283,6 +283,8 @@ def discover_episodes(ds_dir: Path, video_key: str = "observation.images.ego",
     n_skip = 0
     dataset_root = str(ds_dir.resolve())
     hand_frame = info.get("hand_frame", "world")
+    label_kind = str(info.get("label_kind", "ground_truth")).strip().lower()
+    truth_label = "Pseudo-GT" if label_kind == "pseudo_gt" else "GT"
     for k in range(n_ep):
         if (k & 0x3FFF) == 0:             # 每 ~16k 条上报一次（大数据集汇总也占时间）
             _step("build", k, n_ep)
@@ -302,6 +304,8 @@ def discover_episodes(ds_dir: Path, video_key: str = "observation.images.ego",
             "video_start": int(round(float(fts[k]) * fps)),
             "dataset_root": dataset_root,
             "hand_frame": hand_frame,   # 手部落盘坐标系:camera(新)/world(旧)
+            "label_kind": label_kind,
+            "truth_label": truth_label,
         })
     eps.sort(key=lambda e: e["episode_index"])
     _step("build", n_ep, n_ep)

@@ -505,7 +505,7 @@ def _decorate_frame(image: np.ndarray, validity: dict[str, bool],
                     label_text: str | None = None) -> np.ndarray:
     """Draw the method/source title without duplicating 2D hand-presence HUD."""
     image = np.ascontiguousarray(image)
-    _height, width = image.shape[:2]
+    height, width = image.shape[:2]
     compact = width <= 640
     title = ("WUJI RETARGET" if compact else "WUJI HAND  /  RETARGETING")
     if label_text:

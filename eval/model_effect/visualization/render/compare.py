@@ -24,7 +24,7 @@ from . import draw
 # 每手 218→2×109 的切片（与 data/lerobot_v3.py 的 cat 顺序一致）。
 _PER_HAND = 109
 _HAND_SLICES = {"transl_cam": (0, 3), "orient6d": (3, 9), "pose6d": (9, 99), "betas": (99, 109)}
-CACHE_TAG = "allpred_2d_v6_explicit_presence"
+CACHE_TAG = "allpred_2d_v7_no_gt_blank"
 _RENDER_WORKERS = max(1, int(os.environ.get("VIEWER_RENDER_WORKERS") or min(2, os.cpu_count() or 2)))
 _RENDER_INFLIGHT = max(
     _RENDER_WORKERS,
@@ -248,7 +248,8 @@ def render_2d(raw: dict, pred: dict, out_path, *,
               progress: bool = True, layout: str = "overlay", content: str = "both",
               on_step=None, gt_betas_mean: bool = False,
               pred_betas_mean: bool = False, pred_fov_mean: bool = False,
-              gt_world_data=None, pred_world_data=None) -> Path:
+              gt_world_data=None, pred_world_data=None,
+              truth_label: str = "GT") -> Path:
     """lerobot 单 episode 端到端 2D 重投影，写完转 H.264。
 
     GT 路只使用 GT 手、存在性、相机外参和内参；PRED 路只使用对应预测值。layout：
@@ -281,7 +282,7 @@ def render_2d(raw: dict, pred: dict, out_path, *,
     # 每路 source = (world, c2w序列, K, valid_fn(i)->(vl,vr), 标签)。
     def gt_kept_fn(i):  return (bool(gt_kept[i, 0]), bool(gt_kept[i, 1]))
     def pred_kept_fn(i): return (bool(pred_render[i, 0]), bool(pred_render[i, 1]))
-    A = (gt_world, gt_c2w, gt_K, gt_kept_fn, "GT")
+    A = (gt_world, gt_c2w, gt_K, gt_kept_fn, truth_label)
     B = (pred_world, pred_c2w, pred_K, pred_kept_fn, "PRED") if pred_world is not None else None
 
     def draw_src(panel, src, i, palette):
@@ -298,7 +299,7 @@ def render_2d(raw: dict, pred: dict, out_path, *,
         base = to_bgr(frames[i])
         if layout == "side":
             left = draw_src(base, A, i, None); draw.label(left, A[4])
-            draw.presence_label(left, [("GT", gt_kept[i, 0], gt_kept[i, 1])])
+            draw.presence_label(left, [(truth_label, gt_kept[i, 0], gt_kept[i, 1])])
             if B is not None:
                 right = draw_src(base, B, i, None); draw.label(right, B[4])
             else:
@@ -313,7 +314,7 @@ def render_2d(raw: dict, pred: dict, out_path, *,
                 panel = draw_src(panel, B, i, draw.PALETTE_PRED)
             draw.label(panel, f"{A[4]}(green) | {(B[4] if B else '-')}(red)")
             draw.presence_label(panel, [
-                ("GT", gt_kept[i, 0], gt_kept[i, 1]),
+                (truth_label, gt_kept[i, 0], gt_kept[i, 1]),
                 ("PRED", *_presence_at(pred_kept, i)),
             ])
             return panel
@@ -374,8 +375,8 @@ def render_pred_overlay(frames: np.ndarray, pred: dict, out_path, *,
                         fps: float = 30.0, progress: bool = True,
                         hand_frame: str = "world", on_step=None,
                         betas_mean: bool = False, fov_mean: bool = False,
-                        pred_world_data=None) -> Path:
-    """裸视频「仅预测」overlay mp4（无 GT），写完转 H.264，返回 out_path。
+                        pred_world_data=None, layout: str = "overlay") -> Path:
+    """裸视频「仅预测」mp4；side 布局保留空白 GT 槽，右侧显示 PRED。
 
     hand_frame='camera' 时预测手为相机系;裸视频无 GT 相机,只能用预测相机(pred_c2w)转回 world。
     """
@@ -396,17 +397,30 @@ def render_pred_overlay(frames: np.ndarray, pred: dict, out_path, *,
     pred_kept = predicted_presence(pred, T)
     pred_render = prediction_render_mask(pred, T)
 
-    vw = draw.H264PipeWriter(out_path, float(fps), (W, H))
+    if layout not in {"overlay", "side"}:
+        raise ValueError(f"未知 prediction-only 布局: {layout}")
+    sep = 6
+    size = (W * 2 + sep, H) if layout == "side" else (W, H)
+    vw = draw.H264PipeWriter(out_path, float(fps), size)
 
     def render_one(i):
         base_bgr = to_bgr(frames[i])
         sides = panel_sides(
             pred_world, i, pred_render[i, 0], pred_render[i, 1]
         )
-        panel = draw.render_frame(base_bgr, pred_c2w[i], pred_K, sides, faces_lr, mode=mode, alpha=alpha)
-        draw.label(panel, "PRED")
-        draw.presence_label(panel, [("", *_presence_at(pred_kept, i))])
-        return panel
+        pred_panel = draw.render_frame(
+            base_bgr, pred_c2w[i], pred_K, sides, faces_lr,
+            mode=mode, alpha=alpha,
+        )
+        draw.label(pred_panel, "PRED")
+        draw.presence_label(pred_panel, [("", *_presence_at(pred_kept, i))])
+        if layout != "side":
+            return pred_panel
+        empty_panel = np.full((H, W, 3), 12, dtype=np.uint8)
+        canvas = np.full((H, W * 2 + sep, 3), 32, dtype=np.uint8)
+        canvas[:, :W] = empty_panel
+        canvas[:, W + sep:] = pred_panel
+        return canvas
 
     _write_rendered_frames(
         vw, T, render_one, on_step=on_step, progress=progress,

@@ -16,8 +16,10 @@ def test_robot_panels_wait_for_2d_and_compare_gt_pred_per_method():
 
     assert "function _wireServerVideoPanel(pan,badge,{autoStart=true}={})" in source
     assert "const primary2DReady=new Promise" in source
-    assert "const compare=!state.no_truth&&!state.rawOnly;" in source
+    assert "const compare=!state.rawOnly;" in source
     assert "const sources=compare?['gt','pred']" in source
+    assert "if(state.no_truth&&source==='gt') continue;" in source
+    assert ".robot-empty-reference" in style
     assert "_wireServerVideoPanel(child,badge,{autoStart:false})" in source
     assert "if(!pan.isActive||pan.isActive()) pan.releaseRender();" in source
     assert "pan.videos||[pan.video]" in source
@@ -93,6 +95,7 @@ def test_export_renders_overall_2d_before_robot_views_and_keeps_layout_order(tmp
     composed = []
     compose_options = {}
     store.is_no_truth = lambda _eid: False
+    store.item_truth_label = lambda _eid: "GT"
 
     def render_2d(source, path):
         def render(*args, **kwargs):
@@ -160,6 +163,7 @@ def test_export_without_2d_still_renders_selected_robot_views(tmp_path):
     store = Store.__new__(Store)
     composed = []
     store.is_no_truth = lambda _eid: True
+    store.item_truth_label = lambda _eid: "GT"
     store.raw = lambda _eid: {"frames": __import__("numpy").zeros((1, 512, 512, 3))}
     store.mujoco_video = lambda *args, **kwargs: tmp_path / "mujoco.mp4"
     store.retarget_video = lambda *args, **kwargs: tmp_path / "retarget.mp4"
@@ -197,7 +201,7 @@ def test_only_2d_video_uses_explicit_hand_presence_hud():
     compare_source = Path(compare.__file__).read_text(encoding="utf-8")
     draw_source = Path(draw.__file__).read_text(encoding="utf-8")
     retarget_source = Path(wuji_retargeting_video.__file__).read_text(encoding="utf-8")
-    assert compare.CACHE_TAG == "allpred_2d_v6_explicit_presence"
+    assert compare.CACHE_TAG == "allpred_2d_v7_no_gt_blank"
     assert "left: {mark(left)}  right: {mark(right)}" in draw_source
     assert "presence_label(" in compare_source
     assert "LIVE' if validity" not in retarget_source

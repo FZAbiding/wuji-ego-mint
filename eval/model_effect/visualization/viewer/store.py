@@ -1873,24 +1873,33 @@ class Store:
     def item_hand_frame(self, eid: int) -> str:
         return self._items[eid].get("hand_frame", self.default_hand_frame)
 
+    def item_truth_label(self, eid: int) -> str:
+        item = self._items[eid]
+        if item.get("kind") != "lerobot":
+            return "GT"
+        return str(item["ep"].get("truth_label") or "GT")
+
     def item_context(self, eid: int) -> dict:
         """Return source identity for filenames and the UI without exposing cache internals."""
         item = self.item(eid)
         if item["kind"] == "video":
             source = Path(item["path"])
             return {"source_path": str(source), "source_name": source.name,
-                    "episode_ordinal": None, "episode_total": None}
+                    "episode_ordinal": None, "episode_total": None,
+                    "truth_label": "GT"}
         if item["kind"] == "benchmark":
             return {
                 "source_path": item["source_path"],
                 "source_name": f"{item['dataset']} / {item['label']}",
                 "episode_ordinal": None,
                 "episode_total": None,
+                "truth_label": "GT",
             }
         source = Path(item["ds_dir"])
         name = source.parent.name if source.name.lower() in {"lerobot", "lerobot_v3"} else source.name
         return {"source_path": str(source), "source_name": name,
-                "episode_ordinal": item["ep_ordinal"], "episode_total": item["episode_total"]}
+                "episode_ordinal": item["ep_ordinal"], "episode_total": item["episode_total"],
+                "truth_label": self.item_truth_label(eid)}
 
     def _item_cache_tag(self, eid: int) -> str:
         """Stable source tag so equal episode indices from different datasets never share an mp4."""
@@ -1914,7 +1923,7 @@ class Store:
         if raw:
             layout, content, cam_mode, hand_mode, pkey = "gt", "gt", "gt", "gt", "gt"
         elif self.is_no_truth(eid):
-            layout, content = "overlay", "pred"
+            content = "pred"
         return f"{eid}:{mode}:{layout}:{content}:{cam_mode}:{hand_mode}:{pkey}"
 
     def set_prog2d(self, key: str, done: int, total: int) -> None:
@@ -2506,7 +2515,7 @@ class Store:
                             width=render_width,
                             height=render_height,
                             view="third",
-                            label_text="GT" if source == "gt" else "PRED",
+                            label_text=self.item_truth_label(eid) if source == "gt" else "PRED",
                             on_step=report_step,
                         )
 
@@ -2632,7 +2641,7 @@ class Store:
                             image_size=(width, height),
                             width=render_width,
                             height=render_height,
-                            label_text="GT" if source == "gt" else "PRED",
+                            label_text=self.item_truth_label(eid) if source == "gt" else "PRED",
                             on_step=report_step,
                         )
 
@@ -2801,6 +2810,7 @@ class Store:
             "mujoco_3d": "MuJoCo·仿真",
             "wuji_retarget_3d": "Wuji Hand·Retargeting",
         }
+        truth_label = self.item_truth_label(eid)
 
         def emit(**values):
             if on_progress is not None:
@@ -2883,7 +2893,7 @@ class Store:
             def paired_result(gt_path, pred_path):
                 update_source(
                     source_index, 0.96, source_id=source_id, label=label,
-                    message=f"{label} GT/PRED 已渲染")
+                    message=f"{label} {truth_label}/PRED 已渲染")
                 return [
                     (f"{source_id}_gt", gt_path),
                     (f"{source_id}_pred", pred_path),
@@ -2892,11 +2902,11 @@ class Store:
             def robot_comparison(render):
                 gt_path = render(
                     eid, "gt", cam_mode, hand_mode, gt_betas_mean, False,
-                    on_step=paired_phase_step(0, "GT"),
+                    on_step=paired_phase_step(0, truth_label),
                     render_size=export_tile_size)
                 update_source(
                     source_index, 0.48, source_id=source_id, label=label,
-                    message=f"{label} GT 已完成，正在准备 PRED")
+                    message=f"{label} {truth_label} 已完成，正在准备 PRED")
                 pred_path = render(
                     eid, "pred", cam_mode, hand_mode,
                     pred_betas_mean, pred_fov_mean,
@@ -2919,7 +2929,7 @@ class Store:
             if source_id == "both_2d":
                 if compare_sources:
                     gt_path = self.mp4_gt(
-                        eid, mode, on_step=paired_phase_step(0, "GT"),
+                        eid, mode, on_step=paired_phase_step(0, truth_label),
                         betas_mean=gt_betas_mean)
                     pred_path = self.mp4_pred(
                         eid, mode, cam_mode, hand_mode,
@@ -2947,7 +2957,7 @@ class Store:
                     gt_path = self.world_video(
                         eid, views=single_world_views("gt"),
                         render_source="gt", raw=False,
-                        on_step=paired_phase_step(0, "GT"), **world_options)
+                        on_step=paired_phase_step(0, truth_label), **world_options)
                     pred_path = self.world_video(
                         eid, views=single_world_views("pred"),
                         render_source="pred", raw=False,
@@ -3041,6 +3051,7 @@ class Store:
                                           on_step=report_step,
                                           betas_mean=betas_mean,
                                           gt_world_data=self._gtw.get((eid, betas_mean)),
+                                          label_text=self.item_truth_label(eid),
                                           presence_text="")
             self._mp4[key] = out_path
         return self._mp4[key]
@@ -3102,9 +3113,9 @@ class Store:
             pred_betas_mean: bool = False, pred_fov_mean: bool = False,
             on_step=None) -> Path:
         no_truth = self.is_no_truth(eid)
-        # 无真值：只有「仅预测」单画面，layout/content 无意义 → 归一到固定键，避免重复渲。
+        # 无真值：content 固定为 pred；layout=side 时左侧保留空白 GT 槽。
         if no_truth:
-            layout, content = "overlay", "pred"
+            content = "pred"
         pkey = f"{int(gt_betas_mean)}{int(pred_betas_mean)}{int(pred_fov_mean)}"   # 手形/内参平均组合编码
         key = (eid, mode, layout, content, cam_mode, hand_mode, pkey)
         cached = self._mp4.get(key)
@@ -3139,6 +3150,7 @@ class Store:
                                                 mode=mode, fps=self.item_fps(eid),
                                                 hand_frame=self.item_hand_frame(eid),
                                                 betas_mean=pred_betas_mean, fov_mean=pred_fov_mean,
+                                                layout=layout,
                                                 pred_world_data=self._prw.get(
                                                     (eid, cam_mode, hand_mode, pred_betas_mean)),
                                                 on_step=report_step)
@@ -3154,6 +3166,7 @@ class Store:
                     compare.render_2d(raw, self.pred(eid, cam_mode, hand_mode), out_path,
                                       mode=mode, fps=self.item_fps(eid),
                                       progress=True, layout=layout, content=content,
+                                      truth_label=self.item_truth_label(eid),
                                       gt_betas_mean=gt_betas_mean, pred_betas_mean=pred_betas_mean,
                                       pred_fov_mean=pred_fov_mean,
                                       gt_world_data=self._gtw.get((eid, gt_betas_mean)),

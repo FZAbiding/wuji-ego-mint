@@ -77,6 +77,7 @@ let state = { eid:0, fps:30, mode:'mesh_skel', nframes:1,
               capturingFrame:false, frameCaptureMessage:'',
               comparisonSnapshot:null,               // 进入仅原始 GT 前保存当前 GT/PRED 对照，供再次点击恢复
               no_truth:false,                        // 无真值裸视频模式（仅预测，无 GT/loss）
+              truthLabel:'GT',                       // info.json label_kind=pseudo_gt 时为 Pseudo-GT
               rawOnly:false,                         // 仅原始 GT（不跑推理，只看原数据）
               vidName:null, epIdx:null, epOrdinal:null, epTotal:null, sourceName:null, sourcePath:null,
               loaded:false, loading:false, stopped:false, cancelling:false,
@@ -138,7 +139,7 @@ function markPending(msg){ info.textContent = msg || '已选择，点 [⬇ 加�
 function setRawOnly(on){
   state.rawOnly=Boolean(on);
   const button=$('#loadRawBtn'); if(!button) return;
-  button.textContent=state.rawOnly?'返回 GT 对照':'仅看原始 GT';
+  button.textContent=state.rawOnly?`返回 ${state.truthLabel} 对照`:`仅看原始 ${state.truthLabel}`;
   button.classList.toggle('on',state.rawOnly);
   button.setAttribute('aria-pressed',state.rawOnly?'true':'false');
 }
@@ -215,10 +216,10 @@ let ckptCur = '';
 let curDatasetRel = null;     // 当前浏览目录若是 lerobot 数据集则记其**绝对**路径，否则 null（普通目录=视频项）
 let _dsScanToken = 0;         // 数据集枚举轮询代次：每次进目录 +1，失效上一目录仍在跑的轮询（防旧进度回填）
 
-// 按当前加载/选择项切换「模式相关」UI：无真值(裸视频)隐藏 布局/说明/仅看原始，固定 overlay；有真值全开并恢复偏好。
+// 无真值仍使用左右双栏：左侧 GT 保持空白，右侧只显示预测。
 function applyModeUI(nt){
   state.no_truth = nt;
-  state.layout = nt ? 'overlay' : state.layoutPref;
+  state.layout = nt ? 'side' : state.layoutPref;
   const rawButton=$('#loadRawBtn'); if(rawButton) rawButton.style.display=nt?'none':'';
   const mw = $('#metricsWrap'); if(mw && nt) mw.style.display = 'none';   // 无真值无 loss；有真值时 loadEpisode 里按需显隐
 }
@@ -248,7 +249,7 @@ function setDatasetReady(total){
   epSel.value = clampEp(epSel.value); _epCtlDisabled(false);
   const s=$('#epScan'); if(s) s.style.display='none';
   const sp=$('#epScanProg'); if(sp){ sp.style.display='none'; sp.classList.remove('indet'); }
-  markPending(EP_TOTAL > 0 ? '选择 Episode 后点击 [▶ 开始推理]（或随时 [仅看原始 GT]）'
+  markPending(EP_TOTAL > 0 ? `选择 Episode 后点击 [▶ 开始推理]（或随时 [仅看原始 ${state.truthLabel}]）`
                            : '该 lerobot 数据集无 episode');
 }
 function setDatasetScanning(){
@@ -586,14 +587,14 @@ function onLoadRawClick(){
     const snapshot=state.comparisonSnapshot;
     if(!snapshot){
       setRawOnly(false);
-      queueInference('没有可恢复的 GT 对照，请点击 [▶ 开始推理] 生成');
+      queueInference(`没有可恢复的 ${state.truthLabel} 对照，请点击 [▶ 开始推理] 生成`);
       return;
     }
     Object.assign(state,snapshot);
     state.comparisonSnapshot=null;
     setRawOnly(false);
     const metrics=$('#metricsWrap'); if(metrics) metrics.style.display='';
-    setStep('✓ 已返回 GT 对照','ok');
+    setStep(`✓ 已返回 ${state.truthLabel} 对照`,'ok');
     buildPanels(false); requestDraw();
     console.log('[btn] 返回 GT/PRED 对照（复用已有结果）');
     return;
@@ -603,6 +604,7 @@ function onLoadRawClick(){
       loaded:true, fps:state.fps, nframes:state.nframes,
       epIdx:state.epIdx, epOrdinal:state.epOrdinal, epTotal:state.epTotal,
       sourceName:state.sourceName, sourcePath:state.sourcePath,
+      truthLabel:state.truthLabel,
       gt:state.gt, pred:state.pred, metrics:state.metrics,
       metricsError:state.metricsError, nums:state.nums,
       layout:state.layout, inferenceDirty:state.inferenceDirty,
@@ -626,7 +628,7 @@ async function loadEpisode(eid, {explicitInference=false}={}){
   updateLoadBtn();                                            // 加载中主按钮=「停止」，保持可点
   const mw = $('#metricsWrap'); if(mw) mw.style.display = (state.rawOnly||state.no_truth)?'none':'';
   btn.classList.add('stopping'); btn.textContent = '■ 停止';   // 加载中：主按钮变「停止」（可打断）
-  setStep(state.rawOnly ? '读取原始GT…' : '开始…', 'busy');    // 按钮旁：当前步骤
+  setStep(state.rawOnly ? `读取原始${state.truthLabel}…` : '开始…', 'busy');
   setProg({stage: state.rawOnly ? 'load' : 'model'});          // 进度条起手（不确定动画）
   let polling = true, retryMode = null;                   // 超限确认后，在 finally 释放本轮状态再以最大窗重试
   const pollDone = (async ()=>{ while(polling){
@@ -658,7 +660,7 @@ async function loadEpisode(eid, {explicitInference=false}={}){
     }
     else if(!r.ok){ throw new Error(`${r.status} ${await r.text()}`); }
     else{
-      setStep(state.rawOnly ? '✓ 原始GT就绪' : '✓ 完成', 'ok'); setProg({stage:'done'});
+      setStep(state.rawOnly ? `✓ 原始${state.truthLabel}就绪` : '✓ 完成', 'ok'); setProg({stage:'done'});
       const d = await r.json();
       state.fps = d.fps || 30;
       state.nframes = d.nframes || 1;
@@ -667,6 +669,8 @@ async function loadEpisode(eid, {explicitInference=false}={}){
       state.epTotal = d.episode_total;
       state.sourceName = d.source_name || null;
       state.sourcePath = d.source_path || null;
+      state.truthLabel = d.truth_label || 'GT';
+      setRawOnly(state.rawOnly);
       state.gt = d.gt; state.pred = d.pred; state.metrics = d.metrics || null;
       state.metricsError = d.metrics_error || null;
       state.nums = d.nums || null;
@@ -892,8 +896,8 @@ function buildPanels(preserveTime){
     if(!loaded && P.kind!=='tool') continue;
     const sec = document.createElement('section'); sec.className='panel'; sec.dataset.pid=id;
     if(P.kind==='video'){
-      const comparisonTools=!state.no_truth&&!state.rawOnly ? `<span id="layoutWrap" class="tool-field gt-layout-controls"><label>GT 对照</label><span class="seg" id="layoutSeg">
-        <button data-layout="overlay" class="${state.layout==='overlay'?'on':''}" title="在同一画面叠加 GT 与 PRED">GT/PRED 叠加</button><button data-layout="side" class="${state.layout==='side'?'on':''}" title="把 GT 与 PRED 分成左右画面">GT/PRED 并排</button></span></span>` : '';
+      const comparisonTools=!state.no_truth&&!state.rawOnly ? `<span id="layoutWrap" class="tool-field gt-layout-controls"><label>${state.truthLabel} 对照</label><span class="seg" id="layoutSeg">
+        <button data-layout="overlay" class="${state.layout==='overlay'?'on':''}" title="在同一画面叠加 ${state.truthLabel} 与 PRED">${state.truthLabel}/PRED 叠加</button><button data-layout="side" class="${state.layout==='side'?'on':''}" title="把 ${state.truthLabel} 与 PRED 分成左右画面">${state.truthLabel}/PRED 并排</button></span></span>` : '';
       sec.innerHTML = `<div class="btitle"><b class="k">${P.name}</b>${comparisonTools}</div>
         <div class="vwrap"><video class="v2d" preload="auto"></video><div class="vbadge">2D 渲染中…</div></div>`;
       wireLayoutControls(sec);
@@ -936,9 +940,9 @@ function buildPanels(preserveTime){
       vids.push(pan.video);
     } else if(P.kind==='scene'){
       if(!state.views[id]) state.views[id] = {vov:newView(), vgt:newView(), vpred:newView()};
-      const cap = P.content==='hand' ? '逐帧当前相机系；GT手×GT相机，PRED手×PRED相机'
+      const cap = P.content==='hand' ? `逐帧当前相机系；${state.truthLabel}手×${state.truthLabel}相机，PRED手×PRED相机`
         : (P.content==='camworld' ? '相机轨迹+世界轴(首帧对齐)'
-        : (P.content==='worldmotion' ? '固定世界；GT=红绿蓝，PRED=橙黄紫；左键平移，Ctrl+左键旋转' : '世界系整体'));
+        : (P.content==='worldmotion' ? `固定世界；${state.truthLabel}=红绿蓝，PRED=橙黄紫；左键平移，Ctrl+左键旋转` : '世界系整体'));
       const axesKey = AXES;
       const worldTools = P.content==='worldmotion' ? `<span class="scene-local">
         <label>坐标</label><span class="seg world-coord-controls">
@@ -951,7 +955,7 @@ function buildPanels(preserveTime){
         </span></span>` : '';
       sec.innerHTML = `<div class="btitle"><b class="k">${P.name}</b> <span class="sub">${cap} ${axesKey}</span>${worldTools}</div>`
         + (ov ? `<div class="ov3d"><div class="chart"><canvas class="world cov"></canvas></div></div>`
-              : `<div class="worlds"><div class="chart"><span class="cap">GT</span><canvas class="world cgt"></canvas></div>`
+              : `<div class="worlds"><div class="chart"><span class="cap">${state.truthLabel}</span><canvas class="world cgt"></canvas></div>`
                 + `<div class="chart"><span class="cap">PRED</span><canvas class="world cpred"></canvas></div></div>`);
       appendPanel(sec,id);
       const pan = { id, kind:'scene', content:P.content, v:state.views[id], renderDone:false,
@@ -985,13 +989,17 @@ function buildPanels(preserveTime){
       const endpoint=isMujoco?'mujoco':'retarget';
       const renderTag=isMujoco?MUJOCO_RENDER_TAG:RETARGET_RENDER_TAG;
       const videoClass=isMujoco?'mujoco-video':'retarget-video';
-      const compare=!state.no_truth&&!state.rawOnly;
-      const sources=compare?['gt','pred']:[state.rawOnly?'gt':'pred'];
-      const lead=compare?'GT vs PRED':(sources[0]==='gt'?'GT':'PRED');
+      const compare=!state.rawOnly;
+      const sources=compare?['gt','pred']:['gt'];
+      const lead=state.no_truth?`${state.truthLabel} 空白 | PRED`
+        :(compare?`${state.truthLabel} vs PRED`:state.truthLabel);
       const methodDetail=isMujoco?'共用 Wuji 固定视角':'21点重定向 · 共用 Wuji 固定视角';
-      const cells=sources.map(source=>`<div class="robot-video-cell" data-robot-source="${source}">
-        <span class="robot-video-label">${source.toUpperCase()}</span>
-        <div class="vwrap mujoco-wrap"><video class="${videoClass}" preload="metadata" muted playsinline></video><div class="vbadge">${methodLabel} ${source.toUpperCase()} 正在自动渲染…</div></div></div>`).join('');
+      const cells=sources.map(source=>{ const sourceLabel=source==='gt'?state.truthLabel:'PRED';
+        if(state.no_truth&&source==='gt') return `<div class="robot-video-cell" data-robot-source="${source}">
+        <span class="robot-video-label">${sourceLabel}</span><div class="robot-empty-reference"></div></div>`;
+        return `<div class="robot-video-cell" data-robot-source="${source}">
+        <span class="robot-video-label">${sourceLabel}</span>
+        <div class="vwrap mujoco-wrap"><video class="${videoClass}" preload="metadata" muted playsinline></video><div class="vbadge">${methodLabel} ${sourceLabel} 正在自动渲染…</div></div></div>`; }).join('');
       sec.innerHTML=`<div class="btitle"><b class="k">${P.name}</b><span class="sub">${lead} · ${methodDetail} · 起点框 + 实时相机框</span></div>
         <div class="robot-comparison-grid${compare?' is-comparison':''}">${cells}</div>`;
       appendPanel(sec,id);
@@ -1005,6 +1013,7 @@ function buildPanels(preserveTime){
       };
       for(const source of sources){
         const cell=sec.querySelector(`[data-robot-source="${source}"]`);
+        if(state.no_truth&&source==='gt') continue;
         const video=cell.querySelector('video'), badge=cell.querySelector('.vbadge');
         const betas=source==='gt'?state.gtBetas:state.predBetas;
         const fov=source==='gt'?'per_frame':state.predFov;
@@ -1948,7 +1957,7 @@ function renderScene(canvas, items, v, modeKey, video){
         if(!plan.anchorFirst){
           g.fillStyle='#8b98a8'; g.font='11px system-ui'; g.fillText(it.dash?'PRED cam':'cam', Pc[0]+5, Pc[1]-5);
         } else if(state.showCamHand){
-          const cameraName=it.tag||(state.no_truth?'PRED':(state.rawOnly?'GT':(it.dash?'PRED':'GT')));
+          const cameraName=it.tag||(state.no_truth?'PRED':(state.rawOnly?state.truthLabel:(it.dash?'PRED':state.truthLabel)));
           cameraOverlays.push({cam,isPred:cameraName==='PRED'});
         }
       }
@@ -1964,7 +1973,7 @@ function renderScene(canvas, items, v, modeKey, video){
         g.save(); g.globalAlpha=.78; g.strokeStyle=handCol[h]; g.lineWidth=1.4;
         g.setLineDash([]);
         g.beginPath(); g.moveTo(Pc[0],Pc[1]); g.lineTo(Ph[0],Ph[1]); g.stroke();
-        const prefix=items.length>1?(it.dash?'PRED ':'GT '):'';
+        const prefix=items.length>1?(it.dash?'PRED ':state.truthLabel+' '):'';
         const label=`${prefix}${h===0?'L':'R'} ${dist.toFixed(1)} cm`;
         g.font='11px system-ui'; const tw=g.measureText(label).width;
         let lx=(Pc[0]+Ph[0])/2+5, ly=(Pc[1]+Ph[1])/2+(it.dash?11:-7);
@@ -2001,7 +2010,7 @@ function renderScene(canvas, items, v, modeKey, video){
                 ? (zUp?'固定世界系 Z-up(X右/Y前/Z上)':'固定世界系 OpenCV(X右/Y下/Z前)')
                 : '世界系');
   const lay = state.no_truth ? 'PRED'
-            : (state.layout==='overlay' ? 'GT实线 / PRED虚线' : (items[0].tag||''));
+            : (state.layout==='overlay' ? `${state.truthLabel}实线 / PRED虚线` : (items[0].tag||''));
   const gridTxt = plane ? `　格 ${plane.step>=100 ? (plane.step/100)+' m' : plane.step+' cm'}` : '';
   drawChip(g, [{t:fname, c:'#e6edf3', s:13, b:true},
                {t:`${lay}　cm${gridTxt}`, c:'#8b98a8', s:11}], 12, 12, 'tl');
@@ -2027,7 +2036,7 @@ function _fmtv(x, deg){
 function _pct(x){ return (x===null||x===undefined||Number.isNaN(x)) ? '—' : (+x).toFixed(1)+'%'; }
 function _grpBadge(g){                        // 输出头启用/可用状态徽标
   if(!g.enabled) return '未启用';
-  if(!g.available) return g.requires_hand ? '本 episode 无手 GT' : '不可用';
+  if(!g.available) return g.requires_hand ? `本 episode 无手 ${state.truthLabel}` : '不可用';
   return '';
 }
 function drawMetrics(){
@@ -2079,7 +2088,7 @@ function _entTable(title, rec, cf, withFov){
   const at = o => (o ? o[Math.min(cf, o.length-1)] : null);
   const g = rec.gt || {}, p = rec.pred || {};
   const gpos=at(g.pos), ppos=at(p.pos), geul=at(g.eul), peul=at(p.eul);
-  let h = `<table class="nt"><thead><tr><th>${title}</th><th>GT</th><th>PRED</th><th>Δ</th></tr></thead><tbody>`;
+  let h = `<table class="nt"><thead><tr><th>${title}</th><th>${state.truthLabel}</th><th>PRED</th><th>Δ</th></tr></thead><tbody>`;
   h += `<tr><td>位置 XYZ (cm)</td><td>${_fmt3(gpos,2)}</td><td>${_fmt3(ppos,2)}</td><td class="d">${_fmt3(_delta(gpos,ppos),2)}</td></tr>`;
   h += `<tr><td>欧拉 XYZ (°)</td><td>${_fmt3(geul,1)}</td><td>${_fmt3(peul,1)}</td><td class="d">${_fmt3(_delta(geul,peul),1)}</td></tr>`;
   if(withFov){ const gf=at(g.fov), pf=at(p.fov);
@@ -2092,7 +2101,7 @@ function _entTable(title, rec, cf, withFov){
 // 整段平均（固定，不随帧）：GT/PRED 的 FoV 与左右手 betas 平均——与上面「每帧」列对比看抖动。
 function _meanTable(mean){
   if(!mean) return '';
-  let h = `<table class="nt"><thead><tr><th>整段平均</th><th>GT</th><th>PRED</th></tr></thead><tbody>`;
+  let h = `<table class="nt"><thead><tr><th>整段平均</th><th>${state.truthLabel}</th><th>PRED</th></tr></thead><tbody>`;
   h += `<tr><td>FoV (°)</td><td>${_fmt3(mean.gt_fov,2)}</td><td>${_fmt3(mean.pred_fov,2)}</td></tr>`;
   const gb=mean.gt_betas||{}, pb=mean.pred_betas||{};
   h += `<tr><td>左手 betas</td><td class="betas">${_bfmt(gb.left)}</td><td class="betas">${_bfmt(pb.left)}</td></tr>`;
@@ -2103,7 +2112,7 @@ function _meanTable(mean){
 function _meanBetasTable(mean){
   if(!mean) return '';
   const gb=mean.gt_betas||{}, pb=mean.pred_betas||{};
-  let h = `<table class="nt"><thead><tr><th>整段平均</th><th>GT</th><th>PRED</th></tr></thead><tbody>`;
+  let h = `<table class="nt"><thead><tr><th>整段平均</th><th>${state.truthLabel}</th><th>PRED</th></tr></thead><tbody>`;
   h += `<tr><td>左手 betas</td><td class="betas">${_bfmt(gb.left)}</td><td class="betas">${_bfmt(pb.left)}</td></tr>`;
   h += `<tr><td>右手 betas</td><td class="betas">${_bfmt(gb.right)}</td><td class="betas">${_bfmt(pb.right)}</td></tr>`;
   return h + '</tbody></table>';
@@ -4839,10 +4848,10 @@ function ldResultHTML(r){
 
 // 该内容(content)在 overlay/side 下各画哪些 item(GT 实线 / PRED 虚线)。
 function sceneItems(){
-  if(state.no_truth) return {ov:[{d:state.pred,dash:false}], gt:[{d:state.pred,dash:false,tag:'PRED'}], pred:[]};
-  if(state.rawOnly)  return {ov:[{d:state.gt,dash:false}],   gt:[{d:state.gt,dash:false,tag:'GT'}],   pred:[]};
+  if(state.no_truth) return {ov:[{d:state.pred,dash:false}], gt:[], pred:[{d:state.pred,dash:false,tag:'PRED'}]};
+  if(state.rawOnly)  return {ov:[{d:state.gt,dash:false}],   gt:[{d:state.gt,dash:false,tag:state.truthLabel}], pred:[]};
   return {ov:[{d:state.gt,dash:false},{d:state.pred,dash:true}],
-          gt:[{d:state.gt,dash:false,tag:'GT'}], pred:[{d:state.pred,dash:false,tag:'PRED'}]};
+          gt:[{d:state.gt,dash:false,tag:state.truthLabel}], pred:[{d:state.pred,dash:false,tag:'PRED'}]};
 }
 function draw(){
   const it = state.loaded ? sceneItems() : null;
@@ -4866,7 +4875,7 @@ function draw(){
                : source + (state.epIdx!=null ? `ep ${String(state.epIdx).padStart(4,'0')}` : `#${state.eid}`);
     const idx = state.no_truth ? `视频项 #${state.eid}`
               : `Episode 序号 ${state.epOrdinal!=null ? state.epOrdinal : '?'} / ${state.epTotal!=null ? state.epTotal : '?'}`;
-    const tail = state.rawOnly ? '· 仅原始GT（未推理）' : `· ckpt ${CKPT_TAG}`;
+    const tail = state.rawOnly ? `· 仅原始${state.truthLabel}（未推理）` : `· ckpt ${CKPT_TAG}`;
     info.textContent = `${name} (${idx}) · ${state.mode} · fps ${state.fps} · ${state.nframes} 帧 ${tail}`;
     info.title = state.sourcePath || '';
   }

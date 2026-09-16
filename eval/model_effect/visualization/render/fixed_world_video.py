@@ -336,20 +336,22 @@ def _chip(frame: np.ndarray, rows: list[tuple[str, tuple, float]], anchor,
 
 def _items_for_payload(payload: dict, layout: str):
     gt, pred = payload.get("gt"), payload.get("pred")
+    truth_label = str(payload.get("truth_label") or "GT")
     if layout == "side":
         if gt is None:
             return [([{"d": pred, "dash": False, "tag": "PRED"}] if pred else [], "PRED"),
                     ([], "")]
         if pred is None:
-            return [([{"d": gt, "dash": False, "tag": "GT"}], "GT"), ([], "")]
-        return [([{"d": gt, "dash": False, "tag": "GT"}], "GT"),
+            return [([{"d": gt, "dash": False, "tag": truth_label}], truth_label), ([], "")]
+        return [([{"d": gt, "dash": False, "tag": truth_label}], truth_label),
                 ([{"d": pred, "dash": False, "tag": "PRED"}], "PRED")]
     if gt is None:
         return [([{"d": pred, "dash": False, "tag": "PRED"}] if pred else [], "PRED")]
     if pred is None:
-        return [([{"d": gt, "dash": False, "tag": "GT"}], "GT")]
-    return [([{"d": gt, "dash": False, "tag": "GT"},
-              {"d": pred, "dash": True, "tag": "PRED"}], "GT solid / PRED dashed")]
+        return [([{"d": gt, "dash": False, "tag": truth_label}], truth_label)]
+    return [([{"d": gt, "dash": False, "tag": truth_label},
+              {"d": pred, "dash": True, "tag": "PRED"}],
+             f"{truth_label} solid / PRED dashed")]
 
 
 def _extent(items: list[dict], coordinates: dict[int, _Coordinates]):
@@ -667,7 +669,10 @@ def _draw_scene(frame: np.ndarray, items: list[dict], view: dict,
             cv2.circle(frame, tuple(np.rint(project(camera_position)).astype(int)),
                        _scaled(3 if dashed else 4, ss), CAMERA, -1, cv2.LINE_AA)
             if show_cam_hand and camera_rotation is not None:
-                camera_overlays.append((camera_position, camera_rotation, item.get("tag") == "PRED"))
+                camera_overlays.append(
+                    (camera_position, camera_rotation,
+                     item.get("tag") == "PRED", str(item.get("tag") or "GT"))
+                )
 
         joints_by_hand = payload.get("joints") or [[], []]
         trajectories = payload.get("traj") or {}
@@ -730,7 +735,7 @@ def _draw_scene(frame: np.ndarray, items: list[dict], view: dict,
             _draw_scale_bar(frame, scale, ss)
         return
 
-    for position, rotation, predicted in camera_overlays:
+    for position, rotation, predicted, source_label in camera_overlays:
         center_px = project(position)
         pose_colors = ((_bgr("#ff922b"), _bgr("#ffd43b"), _bgr("#b197fc"))
                        if predicted else
@@ -740,7 +745,7 @@ def _draw_scene(frame: np.ndarray, items: list[dict], view: dict,
                    max(7.0, min(radius * 0.22, 22.0)),
                    max(12.0, min(radius * 0.50, 48.0)))
         # 三轴只给视线轴标注（并注明 GT/PRED）：GT+PRED 各三条标签会把画面中心糊成一团。
-        labels = (None, None, "PRED view" if predicted else "GT view")
+        labels = (None, None, f"{source_label} view")
         camera_dash = None
         faded_outline = _mix(OUTLINE, BG_MIX, 0.34)
         for direction, length, color, label in zip(directions, lengths, pose_colors, labels):
@@ -773,10 +778,7 @@ def _draw_hud(frame: np.ndarray, caption: str, plane: dict, ss: float) -> None:
     step = plane["step"]
     grid = f"grid {step / 100:g} m" if step >= 100 else f"grid {step:g} cm"
     title = str(caption or "").strip()
-    if "GT" in title and "PRED" in title:
-        title = "GT / PRED"
-    else:
-        title = title.upper()
+    title = title.upper()
     prefix = f"{title}  |  " if title else ""
     _chip(frame, [(f"{prefix}cm  |  {grid}", TEXT, 0.42)],
           (_scaled(12, ss), _scaled(12, ss)), ss, align="tl")
