@@ -144,7 +144,7 @@ The Viewer automatically opens `http://127.0.0.1:8011` in the default browser. T
 
 ![MINT Web Viewer after loading the model and running inference](docs/asset/mint-web-viewer.png)
 
-**Testing your own video** needs no configuration change and no command line: browse to the video in the input-directory picker at the bottom right of the Viewer and click it. Supported formats are `.mp4`, `.mov`, `.avi`, `.mkv` and `.webm`. A plain video carries no ground truth, so the Viewer runs in prediction-only mode — GT panels, the GT/Pred side-by-side layout and the loss readout are hidden, and everything shown is prediction.
+**Testing your own video** needs no configuration change and no command line: browse to the video in the input-directory picker at the bottom right of the Viewer and click it. Supported formats are `.mp4`, `.mov`, `.avi`, `.mkv` and `.webm`. A plain video carries no ground truth, so the Viewer runs in prediction-only mode: the left reference column remains blank, the right column shows PRED, and no loss is computed.
 
 All visualization operations live in the Viewer panel — there is no separate command-line visualization step. See [Installation](docs/installation.md) for installation, CUDA, MANO, and offline deployment details.
 
@@ -473,6 +473,7 @@ mint/
 | [Architecture](docs/architecture.md) | how the model and the repository fit together |
 | [Installation](docs/installation.md) | profiles, CUDA, MANO, offline deployment |
 | [Data pipeline](docs/data-pipeline.md) | EgoPipeline stages and local reconstruction |
+| [DAS-Ego adapter](docs/das-ego.md) | calibrated rectification, DAS VIO, HaWoR pseudo-labels, and Viewer usage |
 | [Training](docs/training.md) | the two-stage recipe |
 | [LeRobot training data format](docs/lerobot-training-data.md) | what a compatible dataset must contain |
 | [Inference and viewer](docs/inference.md) | Viewer panels, exports, benchmark tools |

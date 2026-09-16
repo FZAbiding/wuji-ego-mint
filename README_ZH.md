@@ -141,7 +141,7 @@ Viewer 启动后会自动在默认浏览器打开 `http://127.0.0.1:8011`，然�
 
 ![MINT Web Viewer 加载模型并完成推理后的界面](docs/asset/mint-web-viewer.png)
 
-**要测试自己的视频**，不需要改配置、也不需要走命令行：在 Viewer 右下方的输入目录里浏览到视频所在路径，点击选中即可。支持的格式为 `.mp4`、`.mov`、`.avi`、`.mkv`、`.webm`。裸视频没有真值，Viewer 会进入纯预测模式 —— GT 面板、GT/Pred 并排布局与 loss 读数都会隐藏，画面上的全部内容都是预测结果。
+**要测试自己的视频**，不需要改配置、也不需要走命令行：在 Viewer 右下方的输入目录里浏览到视频所在路径，点击选中即可。支持的格式为 `.mp4`、`.mov`、`.avi`、`.mkv`、`.webm`。裸视频没有真值，Viewer 会进入纯预测模式：左侧参考栏保持空白，右侧只显示 PRED，并且不计算 loss。
 
 所有可视化操作都在 Viewer 面板中完成，不需要额外的命令行可视化步骤。安装、CUDA、MANO 与离线部署细节见 [安装指南](docs/installation.md)。
 
@@ -469,6 +469,7 @@ mint/
 | --- | --- |
 | [架构](docs/architecture.md) | 模型与仓库如何组织在一起 |
 | [安装](docs/installation.md) | 环境 profile、CUDA、MANO、离线部署 |
+| [DAS-Ego 适配器](docs/das-ego.zh-CN.md) | 标定去畸变、DAS VIO、HaWoR 伪标签与 Viewer 用法 |
 | [数据管线](docs/data-pipeline.md) | EgoPipeline 各阶段与本地复现 |
 | [训练](docs/training.md) | 两阶段训练配方 |
 | [LeRobot 训练数据格式](docs/lerobot-training-data.md) | 兼容数据集需要包含什么 |
